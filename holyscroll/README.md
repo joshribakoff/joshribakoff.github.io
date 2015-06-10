@@ -1,60 +1,89 @@
-holyscroll
+Holyscroll - Infinite pagination hybrid for Angular JS
 ==========
+- Standalone Demo - http://joshribakoff.github.io/holyscroll/demo1.html
+- Paginated Demo - http://joshribakoff.github.io/holyscroll/demo2.html
 
-This is a work in progress. Demo - http://joshribakoff.github.io/holyscroll/controller.html
+![demo gif](http://i.imgur.com/CMRofAh.gif)
 
-Goals:
-- allow scrolling up & down "infinite" pagination style
-- easily display page "links" so the user can see which page they are on, and click to a specific page.
-- changing the current page from outside the directive causes the directive to scroll to that page.
-- as the user scrolls pages within the directive, the directive updates the current page model for observers outside the directive to update pagination links.
-- the directive doesn't need to handle rendering the page links. That warrants a separate wrapper directive which observes & mutates the "currentPage" model that the directive exports.
+#What#
+This is "hybrid" pagination/infinite scrolling. It is an AngularJS directive that lets you add infinite scrollers. Inspired by this example - http://scrollsample.appspot.com/items
 
-Anywhere you want a scroll container:
+It has these benefits:
+- Scroll up to "negative" pages & down "infinite scrolling" style
+- Current page is highlighted in the page number links.
+- Click on the page number links to navigate to a specific page (forwards/backwards).
+- Easily add the current page to the URL (html5 push state), so users can direct link to a specific page, and not break the "back" button.
+
+#Install#
+This package is available via bower & follows standard conventions. Manually save `directive.js` or use bower to install it:
+
+```
+bower install holyscroll --save
+```
+
+Include the JS in your HTML sources, after Angular:
 ```html
-<div my-scroll id="container"
+<script src="bower_components/holyscroll/directive.js"></script>
+```
+
+Tell Angular to add it as a dependency to your app:
+```js
+var app = angular.module('app', ['holyscroll']);
+```
+
+#Usage#
+Anywhere you want a scrolling div, call the directive `holy-scroll`. 
+```html
+<div holy-scroll>
+```
+
+You must also pass in some additional HTML attributes - You must tell the directive what template to use to render each page, where to fetch each page, and what variable to store the "current page" number in on your scope. 
+```html
+<div holy-scroll
   scroll-template="page.html" 
-  scroll-callback="loadPhones(page, cb)"
+  scroll-callback="loadItems(page, cb)"
   scroll-page="currentPage"></div>
 ```
 
-#scroll-callback#
-Directive will call this function on your controller for loading each page object.
 
-Syncronous callback:
+#scroll-callback#
+This function on your controller will be called for loading each page object.
+
+in your template: 
+```html
+<div holy-scroll scroll-callback="loadItems(page, cb)"
+```
+
+synchronous (offline) callback:
 ```js
-$scope.loadPhones = function(page, cb) {
-    // build an array of items for the requested page
+$scope.loadItems = function(page, cb) {
     var items = [];
-    for(i=page*perPage-perPage+1; i<=page*perPage; i++) {
-        items.push('Phone '+i);
-    }
+    // do something here to get the items for the requested page ....
     
-    // return items
-    cb(items);
+    cb(items); // then, return items
 }
 ```
 
-Asynchronous callback:
+asynchronous (remote ajax) callback:
 ```js
-$scope.loadPhones = function(page, cb) {
-    // build an array of items for the requested page
-    $http.get('/items?page='+page).success(function(r) {
-      // return items
+$scope.loadItems = function(page, cb) {
+    // do an ajax call to fetch from the server the items for the requested page
+    $http.get('items?page='+page).success(function(r) {
+      // then, return items
       cb(items);
     });
 }
 ```
 
 #scroll-template#
-The template to bind to each page object. In this template, iterate your items. Usually your page would be an array of item objects you'd iterate in the page template.
+This template filename will be loaded & used to render each page fetched from the server.
 
-Example "page.html" for when your page object is an array of simple strings:
+Usage:
 ```html
-<div ng-repeat="item in page" class="item">{{item}}</div>
-```
+ <div holy-scroll scroll-template="page.html"></div>
+ ```
 
-Example "page.html" for when your page object is an array of item objects with attributes "name" & "img":
+Example "page.html" - example template for when your `page` returned by the callback is an array of item objects, each item having keys "name", & "img".
 ```html
 <div ng-repeat="item in page" class="item">
   <h1>{{item.name}}</h1>
@@ -63,28 +92,11 @@ Example "page.html" for when your page object is an array of item objects with a
 </div>
 ```
 
-As you can see, you structure your data however you want. You can use whatever you want to represent a page (wether its an array of items, or something absurd), and then you choose any way to render that "page" & any of it's contained data (such as items, etc..)
+You can structure your page object any way you want. For simplicity, its recommended that a page be an array of items. How you structure the "items" is up to you.
 
-#Implementation Notes#
-User passes in template file, callback for loading a page, and current page binding (changing this outside directive causes scroll animation). Scrolling within the directive updates this for outside observers.
 
-When user hits top or bottom edge of container, call callback for prev/next page. If it returns false we are at the results boundary. Display a "no more items" message if applicable (not applicable if we started on 1st page and user tried scrolling up).
+#isLoading#
+The model assigned to this attribute will be set to `true` if an ajax call is pending, and set back to `false` when all network requests have completed. Use it to show/hide a loading indicator.
 
-The load page callback returns a page object. This can be any JS object the user chooses. Its anticipated it would usually be an array of "item" objects/array, which are also user defined.
-
-As user scrolls, figure out which page is visible and update the `currentPage` binding.
-
-To find the current page, iterate all pages in DESC order until we find one where the page's top edge is above the containers bottom edge.
-
-$watch `currentPage`, if it changes outside the directive, find the bound page <div>, calculate it's scrollTop() then scroll() the container to that value.
-
-When not enough items on 1st page to get a scrollbar, 2nd page will never load - Set a flag at startup. When loadPage calls back, set a $timeout for 0ms to run after DOM update. If height of loaded pages doesn't exceed container (eg. there's no scrollbar), trigger the next page to load. If the height is sufficient, unset the flag (currently uses an interval, works but prone to race condition).
-
-# bonus features #
-- replace non visible pages with empty space of appropriate height (remove non visible DOM nodes).
-- for convenience, should be able to pass URL as a string instead of callback, if you do this, it assumes your page object is an array of items, and you can avoid the boilerplate hell of wiring up all the asyncronous logic every time. would also export a flag to calling scope to indicate status (1=loading, 0=idle), can then use this value with ng-show on your loading indicator, etc.
-- should the directive modify the URL, or leave it up the calling scope/some kind of wrapper directive?
-- ability to scroll right & left, instead of up & down? could be kinda fun.
-- jquery plugin version of this thing?
-- MeteorJS plugin ("smart package") for this thing? Ability to paginate reactive collections could be fun.
-
+# roadmap #
+- for convenience, should be able to pass URL as a string instead of callback, if you do this, it assumes your page object is an array of items, and you can avoid the boilerplate hell of wiring up all the asyncronous logic every time.
